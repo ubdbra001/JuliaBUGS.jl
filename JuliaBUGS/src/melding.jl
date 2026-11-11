@@ -46,5 +46,27 @@ struct Dictatorial <: AbstractPooling
     end
 end
 
+"""
+    MeldedModel
+
+The Markov melded target built by [`meld`](@ref).
+
+# Fields
+- `submodels`: The submodels passed to `meld`.
+- `links`: The name of the link parameter in each submodel.
+- `priors`: The priors for the link parameter in each submodel.
+- `pooling`: The Pooling method used to meld the submodels.
+- `param_indices`: Indices mapping the global sample to specific submodel parameters.
+- `dimension`: Dimensions of the global sample.
+"""
+struct MeldedModel{P<:AbstractPooling}
+    submodels::Vector
+    links::Vector
+    priors::Vector
+    pooling::P
+    param_indices::Vector
+    dimension::Int
+end
+
 
 end
