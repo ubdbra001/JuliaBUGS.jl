@@ -13,6 +13,8 @@ p_{\\text{meld}}(\\phi, \\psi_1, \\ldots, \\psi_M \\mid y_1, \\ldots, y_M)
 where ``p_{\\text{pool}}`` is a pooling of the submodel marginals.
 """
 module Melding
+
+import LogDensityProblems
 using JuliaBUGS: model_parameters, BUGSModel
 
 using Distributions
@@ -199,7 +201,29 @@ function adjust_prior_logdensity(p::Dictatorial, priors, phi_val)
     return adj
 end
 
+# Set the total count of unique parameters across all submodels
+LogDensityProblems.dimension(melded::MeldedModel) = melded.dimension
 
+# Declare basic log-density capability (LogDensityOrder{0} means target evaluation only)
+LogDensityProblems.capabilities(::Type{<:MeldedModel}) = LogDensityProblems.LogDensityOrder{0}()
 
+"""
+    LogDensityProblems.logdensity(melded::MeldedModel, theta_global)
+
+Evaluate the total log-density for a the melded model 
+"""
+function LogDensityProblems.logdensity(melded::MeldedModel, theta_global)
+
+    phi_val = theta_global[1]
+
+    submodel_thetas = extract_submodel_params(melded, theta_global)
+
+    submodel_lps = LogDensityProblems.logdensity.(melded.submodels, submodel_thetas)
+    base_lp = sum(submodel_lps)
+
+    prior_adj = adjust_prior_logdensity(melded.pooling, melded.priors, phi_val)
+
+    return base_lp + prior_adj
+end
 
 end
