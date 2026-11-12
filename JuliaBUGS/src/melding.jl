@@ -20,7 +20,8 @@ using JuliaBUGS: model_parameters, BUGSModel
 using Distributions
 using AbstractPPL: VarName
 
-# Pooling options
+export meld, MeldedModel
+export AbstractPooling, ProductOfExperts, Dictatorial
 
 """
     Abstract Pooling
