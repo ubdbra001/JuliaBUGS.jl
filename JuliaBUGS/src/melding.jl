@@ -13,7 +13,7 @@ p_{\\text{meld}}(\\phi, \\psi_1, \\ldots, \\psi_M \\mid y_1, \\ldots, y_M)
 where ``p_{\\text{pool}}`` is a pooling of the submodel marginals.
 """
 module Melding
-using JuliaBUGS: model_parameters
+using JuliaBUGS: model_parameters, BUGSModel
 
 using Distributions
 using AbstractPPL: VarName
@@ -133,6 +133,43 @@ Convenience function for extracting submodel parameters
 """
 extract_submodel_params(melded::MeldedModel, theta_global::AbstractVector) =
     extract_submodel_params(melded.param_indices, theta_global)
+
+"""
+    meld(
+    submodels::AbstractVector,
+    links::AbstractVector,
+    pooling::AbstractPooling
+)
+
+Meld the submodels in preparation for sampling. 
+The user should provide a Vector of models, a Vector of symbols identifying the linking
+parameter for each model, and a pooling method.
+"""
+function meld(
+    submodels::AbstractVector,
+    links::AbstractVector,
+    pooling::AbstractPooling
+)
+    M = length(submodels)
+    M >= 1 || throw(ArgumentError("There should be at least one submodel for melding"))
+
+    length(links) == M || throw(ArgumentError("got $(length(links)) link specifications for $M submodels"))
+
+    models = BUGSModel[m for m in submodels]
+
+    priors = extract_prior.(models, links)
+
+    param_indices, total_dims = build_param_map(submodels, links)
+
+    return MeldedModel(
+        submodels,
+        links,
+        priors,
+        pooling,
+        collect(param_indices),
+        total_dims
+    )
+end
 
 
 
