@@ -13,6 +13,10 @@ p_{\\text{meld}}(\\phi, \\psi_1, \\ldots, \\psi_M \\mid y_1, \\ldots, y_M)
 where ``p_{\\text{pool}}`` is a pooling of the submodel marginals.
 """
 module Melding
+using JuliaBUGS: model_parameters
+
+using Distributions
+using AbstractPPL: VarName
 
 # Pooling options
 
@@ -67,6 +71,69 @@ struct MeldedModel{P<:AbstractPooling}
     param_indices::Vector
     dimension::Int
 end
+
+"""
+    extract_prior(model, link_symbol::Symbol)
+
+Extracts the prior distribution of the specified parameter from the model.
+"""
+function extract_prior(model, link_symbol::Symbol)
+    vn = VarName{link_symbol}()
+    node_info = model.g[vn]
+
+    !node_info.is_stochastic && error("Link parameter $link_symbol must be a stochastic variable (~).")
+
+    env = hasproperty(model, :evaluation_env) ? model.evaluation_env : NamedTuple()
+    loop_vars = hasproperty(node_info, :loop_vars) ? node_info.loop_vars : NamedTuple()
+
+    return node_info.node_function(env, loop_vars)
+end
+
+
+"""
+    build_param_map(submodels, links)
+
+Walk over submodels to identify positions of parameters for extraction from sample.
+"""
+function build_param_map(submodels, links)
+    link_vns = [VarName{l}() for l in links]
+
+    curr_slot = 1
+
+    model_vec = Vector{Vector{Int}}()
+
+    for (model, link) in zip(submodels, link_vns)
+
+        param_vec = Int[]
+
+        for var in model_parameters(model)
+            slot = (var == link) ? 1 : (curr_slot += 1)
+            push!(param_vec, slot)
+        end
+
+        push!(model_vec, param_vec)
+    end
+
+    return Tuple(model_vec), curr_slot
+end
+
+"""
+    extract_submodel_params(param_indices, theta_global::AbstractVector)
+
+Extracts the parameter values for each submodel from the theta_global vector
+"""
+function extract_submodel_params(param_indices, theta_global::AbstractVector)
+    return map(idx -> theta_global[idx], param_indices)
+end
+
+"""
+    extract_submodel_params(melded::MeldedModel, theta_global::AbstractVector)
+
+Convenience function for extracting submodel parameters
+"""
+extract_submodel_params(melded::MeldedModel, theta_global::AbstractVector) =
+    extract_submodel_params(melded.param_indices, theta_global)
+
 
 
 end
