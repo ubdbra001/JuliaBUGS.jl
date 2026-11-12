@@ -171,6 +171,35 @@ function meld(
     )
 end
 
+"""
+    adjust_prior_logdensity(::ProductOfExperts, priors, phi_val)
+
+Product of Experts adjustment to logdensity probability for a sample.
+In this case no adjustment needed as the PoE pooling and adjustment cancel each other out.
+"""
+function adjust_prior_logdensity(::ProductOfExperts, priors, phi_val)
+    return 0.0
+end
+
+
+"""
+    adjust_prior_logdensity(p::Dictatorial, priors, phi_val)
+
+Dictatorial adjustment to logdensity probability for a sample.
+In this case the logdensity for each of the non-dicattorial priors needs to be
+subtracted to prevent double counting.
+"""
+function adjust_prior_logdensity(p::Dictatorial, priors, phi_val)
+    adj = 0.0
+    for i in 1:length(priors)
+        if i != p.dictator
+            adj -= Distributions.logpdf(priors[i], phi_val)
+        end
+    end
+    return adj
+end
+
+
 
 
 end
