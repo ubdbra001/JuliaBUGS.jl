@@ -14,7 +14,7 @@ where ``p_{\\text{pool}}`` is a pooling of the submodel marginals.
 """
 module Melding
 
-import LogDensityProblems
+import LogDensityProblems, AbstractMCMC, AdvancedMH
 using JuliaBUGS: model_parameters, BUGSModel
 
 using Distributions
@@ -225,6 +225,53 @@ function LogDensityProblems.logdensity(melded::MeldedModel, theta_global)
     prior_adj = adjust_prior_logdensity(melded.pooling, melded.priors, phi_val)
 
     return base_lp + prior_adj
+end
+
+"""
+    _bundle_melded(samples::AbstractVector, melded::MeldedModel, sampler::AbstractMCMC.AbstractSampler)
+
+Slice raw sampler transitions into submodel parameter vectors, untransform each submodel's
+draws to constrained `VarName` values, and merge them into a `Vector{AbstractMCMC.ParamsWithStats}`.
+"""
+function _bundle_melded(
+    samples::AbstractVector,
+    melded::MeldedModel,
+    sampler::AbstractMCMC.AbstractSampler,
+)
+    all_draws = [
+        AbstractMCMC.bundle_samples(
+            [AdvancedMH.Transition(t.params[idx], t.lp, t.accepted) for t in samples],
+            AbstractMCMC.LogDensityModel(m),
+            sampler,
+            nothing,
+            Vector{AbstractMCMC.ParamsWithStats},
+        )
+        for (m, idx) in zip(melded.submodels, melded.param_indices)
+    ]
+
+    return [
+        AbstractMCMC.ParamsWithStats(
+            merge((d[i].params for d in all_draws)...),
+            all_draws[1][i].stats,
+        )
+        for i in eachindex(samples)
+    ]
+end
+
+"""
+    AbstractMCMC.bundle_samples(samples, wrapped::LogDensityModel{<:MeldedModel}, sampler, state, ::Type{<:AbstractVector{<:ParamsWithStats}}; kwargs...)
+
+Bundle raw transitions from a `MeldedModel` into constrained `ParamsWithStats` draws.
+"""
+function AbstractMCMC.bundle_samples(
+    samples::Vector,
+    wrapped::AbstractMCMC.LogDensityModel{<:MeldedModel},
+    sampler::AbstractMCMC.AbstractSampler,
+    state,
+    ::Type{<:AbstractVector{<:AbstractMCMC.ParamsWithStats}};
+    kwargs...,
+)
+    return _bundle_melded(samples, wrapped.logdensity, sampler)
 end
 
 end
