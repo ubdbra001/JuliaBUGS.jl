@@ -17,6 +17,7 @@ module Melding
 import LogDensityProblems, AbstractMCMC, AdvancedMH
 using JuliaBUGS: model_parameters, BUGSModel
 
+using Random
 using Distributions
 using AbstractPPL: VarName
 
@@ -259,6 +260,29 @@ function _bundle_melded(
 end
 
 """
+    _finish_chain(merged, chain_type::Type, discard_initial::Int, thinning::Int)
+
+Return `merged` as-is when `chain_type` is `Any` or a vector of `ParamsWithStats`, or convert
+it into the requested `chain_type` via `AbstractMCMC.from_samples`.
+"""
+function _finish_chain(
+    merged::Vector{<:AbstractMCMC.ParamsWithStats},
+    chain_type::Type,
+    discard_initial::Int,
+    thinning::Int,
+)
+    if chain_type === Any || chain_type <: AbstractVector{<:AbstractMCMC.ParamsWithStats}
+        return merged
+    end
+    return AbstractMCMC.from_samples(
+        chain_type,
+        reshape(merged, :, 1);
+        start=discard_initial + 1,
+        thin=thinning,
+    )
+end
+
+"""
     AbstractMCMC.bundle_samples(samples, wrapped::LogDensityModel{<:MeldedModel}, sampler, state, ::Type{<:AbstractVector{<:ParamsWithStats}}; kwargs...)
 
 Bundle raw transitions from a `MeldedModel` into constrained `ParamsWithStats` draws.
@@ -272,6 +296,35 @@ function AbstractMCMC.bundle_samples(
     kwargs...,
 )
     return _bundle_melded(samples, wrapped.logdensity, sampler)
+end
+
+"""
+    AbstractMCMC.sample(rng::Random.AbstractRNG, melded::MeldedModel, sampler::AbstractMCMC.AbstractSampler, N_or_isdone; chain_type=Any, discard_initial=0, thinning=1, kwargs...)
+
+Draw MCMC samples from `melded`, untransforming and merging submodel parameters before
+converting to `chain_type`.
+"""
+function AbstractMCMC.sample(
+    rng::Random.AbstractRNG,
+    melded::MeldedModel,
+    sampler::AbstractMCMC.AbstractSampler,
+    N_or_isdone;
+    chain_type::Type=Any,
+    discard_initial::Int=0,
+    thinning::Int=1,
+    kwargs...,
+)
+    merged = AbstractMCMC.sample(
+        rng,
+        AbstractMCMC.LogDensityModel(melded),
+        sampler,
+        N_or_isdone;
+        chain_type=Vector{AbstractMCMC.ParamsWithStats},
+        discard_initial=discard_initial,
+        thinning=thinning,
+        kwargs...,
+    )
+    return _finish_chain(merged, chain_type, discard_initial, thinning)
 end
 
 end
